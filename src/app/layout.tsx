@@ -29,6 +29,12 @@ export default function RootLayout({
                     Home
                   </a>
                   <a
+                    href="/query"
+                    className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+                  >
+                    🔍 Query Builder
+                  </a>
+                  <a
                     href="/analytics"
                     className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
                   >
