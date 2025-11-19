@@ -17,8 +17,24 @@ export default function RootLayout({
         <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
           <div className="container mx-auto px-4 py-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <h1 className="text-xl font-bold">Arkiv Analytics</h1>
+              <div className="flex items-center space-x-6">
+                <a href="/" className="text-xl font-bold hover:text-blue-600 transition-colors">
+                  Arkiv Analytics
+                </a>
+                <div className="flex items-center space-x-4">
+                  <a
+                    href="/"
+                    className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+                  >
+                    Home
+                  </a>
+                  <a
+                    href="/analytics"
+                    className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+                  >
+                    Analytics
+                  </a>
+                </div>
               </div>
               <div className="flex items-center space-x-4">
                 <a
