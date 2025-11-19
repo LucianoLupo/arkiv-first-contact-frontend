@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import type { AaveEventType } from '@/lib/types';
+import type { EntityType, ProtocolType, EventType } from '@/lib/types';
 
 export interface QueryConfig {
-  eventType?: AaveEventType | 'all';
+  entityType?: EntityType | 'all';
+  protocol?: ProtocolType | 'all';
+  eventType?: EventType | 'all';
   asset?: string;
   user?: string;
   minAmount?: string;
@@ -20,6 +22,8 @@ interface QueryBuilderProps {
 
 export default function QueryBuilder({ onExecute, loading = false }: QueryBuilderProps) {
   const [config, setConfig] = useState<QueryConfig>({
+    entityType: 'all',
+    protocol: 'all',
     eventType: 'all',
     asset: '',
     user: '',
@@ -36,6 +40,8 @@ export default function QueryBuilder({ onExecute, loading = false }: QueryBuilde
 
   const handleReset = () => {
     setConfig({
+      entityType: 'all',
+      protocol: 'all',
       eventType: 'all',
       asset: '',
       user: '',
@@ -46,30 +52,75 @@ export default function QueryBuilder({ onExecute, loading = false }: QueryBuilde
     });
   };
 
+  // Get available event types based on selected protocol
+  const getEventTypeOptions = () => {
+    if (config.protocol === 'aave-v3') {
+      return ['Supply', 'Borrow', 'Withdraw', 'Repay', 'LiquidationCall'];
+    } else if (config.protocol === 'uniswap-v3') {
+      return ['Swap'];
+    } else {
+      // All protocols - show all event types
+      return ['Supply', 'Borrow', 'Withdraw', 'Repay', 'LiquidationCall', 'Swap'];
+    }
+  };
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
       <h2 className="text-2xl font-bold mb-4">Query Builder</h2>
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-        Build custom queries to analyze Aave protocol events stored on Arkiv DB-chain
+        Build custom queries to analyze DeFi protocol data stored on Arkiv DB-chain
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Event Type Filter */}
+        {/* Entity Type Filter */}
         <div>
-          <label className="block text-sm font-medium mb-2">Event Type</label>
+          <label className="block text-sm font-medium mb-2">Entity Type</label>
           <select
-            value={config.eventType}
-            onChange={(e) => setConfig({ ...config, eventType: e.target.value as any })}
+            value={config.entityType}
+            onChange={(e) => setConfig({ ...config, entityType: e.target.value as any })}
             className="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 px-4 py-2"
           >
-            <option value="all">All Event Types</option>
-            <option value="Supply">Supply</option>
-            <option value="Borrow">Borrow</option>
-            <option value="Withdraw">Withdraw</option>
-            <option value="Repay">Repay</option>
-            <option value="LiquidationCall">Liquidation Call</option>
+            <option value="all">All Entity Types</option>
+            <option value="protocol_event">Protocol Events</option>
+            <option value="aggregated_metric">Aggregated Metrics</option>
+            <option value="price_snapshot">Price Snapshots</option>
           </select>
         </div>
+
+        {/* Protocol Filter - Only show for protocol events */}
+        {(config.entityType === 'all' || config.entityType === 'protocol_event') && (
+          <div>
+            <label className="block text-sm font-medium mb-2">Protocol</label>
+            <select
+              value={config.protocol}
+              onChange={(e) => setConfig({ ...config, protocol: e.target.value as any, eventType: 'all' })}
+              className="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 px-4 py-2"
+            >
+              <option value="all">All Protocols</option>
+              <option value="aave-v3">Aave V3</option>
+              <option value="uniswap-v3">Uniswap V3</option>
+            </select>
+          </div>
+        )}
+
+        {/* Event Type Filter - Only show for protocol events */}
+        {(config.entityType === 'all' || config.entityType === 'protocol_event') && (
+          <div>
+            <label className="block text-sm font-medium mb-2">Event Type</label>
+            <select
+              value={config.eventType}
+              onChange={(e) => setConfig({ ...config, eventType: e.target.value as any })}
+              className="w-full rounded-lg border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 px-4 py-2"
+            >
+              <option value="all">All Event Types</option>
+              {getEventTypeOptions().map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Asset Filter */}
         <div>
@@ -205,22 +256,43 @@ export default function QueryBuilder({ onExecute, loading = false }: QueryBuilde
 function generateQueryPreview(config: QueryConfig): string {
   const conditions = [];
 
+  // Entity type
+  if (config.entityType && config.entityType !== 'all') {
+    conditions.push(`entityType = "${config.entityType}"`);
+  }
+
+  // Protocol
+  if (config.protocol && config.protocol !== 'all') {
+    conditions.push(`protocol = "${config.protocol}"`);
+  }
+
+  // Event type
   if (config.eventType && config.eventType !== 'all') {
     conditions.push(`eventType = "${config.eventType}"`);
   }
+
+  // Asset
   if (config.asset) {
-    conditions.push(`reserve = "${config.asset}"`);
+    conditions.push(`asset = "${config.asset}"`);
   }
+
+  // User
   if (config.user) {
     conditions.push(`user = "${config.user}"`);
   }
+
+  // Amount range
   if (config.minAmount) {
-    conditions.push(`amount >= ${config.minAmount}`);
+    conditions.push(`amountUSD >= ${config.minAmount}`);
   }
   if (config.maxAmount) {
-    conditions.push(`amount <= ${config.maxAmount}`);
+    conditions.push(`amountUSD <= ${config.maxAmount}`);
   }
 
-  const where = conditions.length > 0 ? conditions.join(' AND ') : 'protocol = "aave-v3"';
-  return `SELECT * FROM aave_events WHERE ${where} LIMIT ${config.limit}`;
+  const tableName = config.entityType === 'aggregated_metric' ? 'metrics' :
+                     config.entityType === 'price_snapshot' ? 'prices' :
+                     'events';
+
+  const where = conditions.length > 0 ? conditions.join(' AND ') : 'entityType = "protocol_event"';
+  return `SELECT * FROM ${tableName} WHERE ${where} LIMIT ${config.limit}`;
 }

@@ -6,22 +6,26 @@ import type { ParsedEvent } from '@/lib/types';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { eventType, asset, user, minAmount, maxAmount, limit } = body;
+    const { entityType, protocol, eventType, asset, user, minAmount, maxAmount, limit } = body;
 
     const client = getArkivPublicClient();
 
     // Build query based on filters
     let query = client.buildQuery();
 
-    // Priority: specific filters over general protocol filter
-    if (eventType && eventType !== 'all') {
+    // Priority: entity type > protocol > specific filters
+    if (entityType && entityType !== 'all') {
+      query = query.where(eq('entityType', entityType));
+    } else if (protocol && protocol !== 'all') {
+      query = query.where(eq('protocol', protocol));
+    } else if (eventType && eventType !== 'all') {
       query = query.where(eq('eventType', eventType));
     } else if (asset) {
       query = query.where(eq('reserve', asset));
     } else if (user) {
       query = query.where(eq('user', user));
     } else {
-      query = query.where(eq('protocol', 'aave-v3'));
+      query = query.where(eq('entityType', 'protocol_event'));
     }
 
     const result = await query
@@ -38,23 +42,51 @@ export async function POST(request: NextRequest) {
       };
     });
 
-    // Client-side filtering
-    if (asset && eventType && eventType !== 'all') {
-      events = events.filter(e => e.reserve === asset);
+    // Client-side filtering for protocol (if entityType was the main filter)
+    if (entityType && protocol && protocol !== 'all') {
+      events = events.filter(e => (e as any).protocol === protocol);
     }
 
-    if (user && (eventType && eventType !== 'all' || asset)) {
-      events = events.filter(e => e.user === user);
+    // Client-side filtering for event type
+    if (eventType && eventType !== 'all' && (entityType || protocol)) {
+      events = events.filter(e => e.eventType === eventType);
     }
 
+    // Client-side filtering for asset
+    if (asset && (eventType || protocol || entityType)) {
+      events = events.filter(e => {
+        // Handle both Aave (reserve) and Uniswap (tokenIn/tokenOut)
+        return (e as any).reserve === asset ||
+               (e as any).tokenIn === asset ||
+               (e as any).tokenOut === asset;
+      });
+    }
+
+    // Client-side filtering for user
+    if (user && (eventType || protocol || entityType || asset)) {
+      events = events.filter(e => {
+        // Handle both Aave (user) and Uniswap (sender/recipient)
+        return (e as any).user === user ||
+               (e as any).sender === user ||
+               (e as any).recipient === user;
+      });
+    }
+
+    // Client-side filtering for amount ranges
     if (minAmount) {
       const min = parseFloat(minAmount);
-      events = events.filter(e => parseFloat(e.amount) >= min);
+      events = events.filter(e => {
+        const amount = parseFloat((e as any).amountUSD || (e as any).amount || '0');
+        return amount >= min;
+      });
     }
 
     if (maxAmount) {
       const max = parseFloat(maxAmount);
-      events = events.filter(e => parseFloat(e.amount) <= max);
+      events = events.filter(e => {
+        const amount = parseFloat((e as any).amountUSD || (e as any).amount || '0');
+        return amount <= max;
+      });
     }
 
     // Sort by timestamp descending
@@ -71,6 +103,8 @@ export async function POST(request: NextRequest) {
       data: events,
       count: events.length,
       query: {
+        entityType,
+        protocol,
         eventType,
         asset,
         user,
