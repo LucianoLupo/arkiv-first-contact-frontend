@@ -248,7 +248,7 @@ export async function queryEventsWithFilters(
  * Calculate aggregate statistics from events
  */
 export async function calculateEventStats(): Promise<EventStats> {
-  const events = await queryAllEvents(1000);
+  const events = await queryAllEvents(100);
 
   const stats: EventStats = {
     totalEvents: events.length,

@@ -17,7 +17,7 @@ export default function AnalyticsPage() {
         setLoading(true);
 
         // Fetch Aave V3 events
-        const eventsData = await queryAllEvents(500);
+        const eventsData = await queryAllEvents(100);
         setEvents(eventsData);
       } catch (error) {
         console.error('Error loading analytics data:', error);

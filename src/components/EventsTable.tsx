@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { ParsedEvent } from '@/lib/types';
 import { getEventAsset, getEventUser, getEventAmount } from '@/lib/types';
+import { queryAllEvents } from '@/lib/queries';
 
 interface EventsTableProps {
   initialEvents?: ParsedEvent[];
@@ -14,20 +15,18 @@ export default function EventsTable({ initialEvents = [] }: EventsTableProps) {
 
   useEffect(() => {
     if (!initialEvents.length) {
-      fetchEvents();
+      fetchEventsDirectly();
     }
   }, [initialEvents.length]);
 
-  async function fetchEvents() {
+  async function fetchEventsDirectly() {
     try {
       setLoading(true);
-      const response = await fetch('/api/events?limit=50');
-      const json = await response.json();
-      if (json.success) {
-        setEvents(json.data);
-      }
+      // Query Arkiv directly instead of using API route
+      const eventsData = await queryAllEvents(100);
+      setEvents(eventsData);
     } catch (error) {
-      console.error('Failed to fetch events:', error);
+      console.error('Failed to fetch events from Arkiv:', error);
     } finally {
       setLoading(false);
     }
@@ -49,6 +48,9 @@ export default function EventsTable({ initialEvents = [] }: EventsTableProps) {
     return (
       <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-lg shadow">
         <p className="text-gray-500 dark:text-gray-400">No events found</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+          Make sure the backend is running and events are being stored on Arkiv
+        </p>
       </div>
     );
   }

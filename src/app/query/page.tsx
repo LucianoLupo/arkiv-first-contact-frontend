@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import QueryBuilder, { type QueryConfig } from '@/components/QueryBuilder';
 import QueryResults from '@/components/QueryResults';
-import type { ParsedEvent } from '@/lib/types';
+import type { ParsedEvent, EventFilters } from '@/lib/types';
+import { queryEventsWithFilters } from '@/lib/queries';
 
 export default function QueryPage() {
   const [results, setResults] = useState<ParsedEvent[] | null>(null);
@@ -17,28 +18,20 @@ export default function QueryPage() {
     setQueryConfig(config);
 
     try {
-      const response = await fetch('/api/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          eventType: config.eventType,
-          asset: config.asset,
-          user: config.user,
-          minAmount: config.minAmount,
-          maxAmount: config.maxAmount,
-          limit: config.limit,
-        }),
-      });
+      // Query Arkiv directly instead of using API route
+      const filters: EventFilters = {
+        eventType: config.eventType === 'all' ? undefined : config.eventType,
+        asset: config.asset,
+        user: config.user,
+        minAmount: config.minAmount,
+        maxAmount: config.maxAmount,
+        limit: config.limit,
+      };
 
-      const json = await response.json();
-
-      if (json.success) {
-        setResults(json.data);
-      } else {
-        setError(json.error || 'Failed to execute query');
-      }
+      const eventsData = await queryEventsWithFilters(filters);
+      setResults(eventsData);
     } catch (err) {
-      setError('Network error. Please try again.');
+      setError('Failed to query Arkiv. Please try again.');
       console.error('Query execution error:', err);
     } finally {
       setLoading(false);
