@@ -1,51 +1,68 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import type { ParsedEvent } from '@/lib/types';
 
 interface VolumeData {
   asset: string;
-  volume: number;
+  volume: string;
 }
 
-export default function VolumeChart() {
-  const [data, setData] = useState<VolumeData[]>([]);
-  const [loading, setLoading] = useState(true);
+interface VolumeChartProps {
+  events: ParsedEvent[];
+}
 
-  useEffect(() => {
-    fetchVolumeData();
-  }, []);
+export default function VolumeChart({ events }: VolumeChartProps) {
+  // Calculate volume by asset from events
+  const volumeByAsset: Record<string, bigint> = {};
 
-  async function fetchVolumeData() {
+  events.forEach(event => {
+    const data = event as any;
+
     try {
-      setLoading(true);
-      const response = await fetch('/api/analytics/volume');
-      const json = await response.json();
+      // For Withdraw/Supply events (reserve field)
+      if (data.reserve && data.amount) {
+        const current = volumeByAsset[data.reserve] || BigInt(0);
+        volumeByAsset[data.reserve] = current + BigInt(data.amount);
+      }
 
-      if (json.success) {
-        // Transform data for recharts
-        const chartData = Object.entries(json.data).map(([asset, volume]) => ({
-          asset,
-          volume: Math.round(volume as number),
-        }));
+      // For FlashLoan events (asset field)
+      if (data.asset && data.amount && !data.reserve) {
+        const current = volumeByAsset[data.asset] || BigInt(0);
+        volumeByAsset[data.asset] = current + BigInt(data.amount);
+      }
 
-        // Sort by volume descending
-        chartData.sort((a, b) => b.volume - a.volume);
-        setData(chartData);
+      // For LiquidationCall events
+      if (data.collateralAsset && data.liquidatedCollateralAmount) {
+        const current = volumeByAsset[data.collateralAsset] || BigInt(0);
+        volumeByAsset[data.collateralAsset] = current + BigInt(data.liquidatedCollateralAmount);
+      }
+
+      if (data.debtAsset && data.debtToCover) {
+        const current = volumeByAsset[data.debtAsset] || BigInt(0);
+        volumeByAsset[data.debtAsset] = current + BigInt(data.debtToCover);
       }
     } catch (error) {
-      console.error('Failed to fetch volume data:', error);
-    } finally {
-      setLoading(false);
+      // Skip events with invalid BigInt values
     }
-  }
+  });
 
-  if (loading) {
+  // Transform data for recharts (convert BigInt to numbers for display)
+  const chartData: VolumeData[] = Object.entries(volumeByAsset)
+    .map(([asset, volume]) => ({
+      asset: asset.substring(0, 8) + '...' + asset.substring(asset.length - 6), // Shorten address
+      fullAsset: asset,
+      volume: (Number(volume) / 1e18).toFixed(2), // Convert to ETH equivalent
+    }))
+    .sort((a, b) => parseFloat(b.volume) - parseFloat(a.volume))
+    .slice(0, 10); // Top 10 assets
+
+  if (chartData.length === 0) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold mb-4">Total Volume by Asset</h3>
-        <div className="h-64 flex items-center justify-center">
-          <div className="animate-pulse text-gray-400">Loading chart...</div>
+        <h3 className="text-lg font-semibold mb-4">Volume by Asset</h3>
+        <div className="h-64 flex items-center justify-center text-gray-400">
+          No volume data available
         </div>
       </div>
     );
@@ -53,26 +70,36 @@ export default function VolumeChart() {
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-      <h3 className="text-lg font-semibold mb-4">Total Volume by Asset</h3>
+      <h3 className="text-lg font-semibold mb-4">Volume by Asset</h3>
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-        Total transaction volume across all event types
+        Top 10 assets by total transaction volume (ETH equivalent)
       </p>
 
       <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={data}>
+        <BarChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="asset" />
-          <YAxis />
+          <XAxis
+            dataKey="asset"
+            tick={{ fontSize: 12 }}
+            angle={-45}
+            textAnchor="end"
+            height={80}
+          />
+          <YAxis
+            tick={{ fontSize: 12 }}
+            label={{ value: 'Volume (ETH)', angle: -90, position: 'insideLeft' }}
+          />
           <Tooltip
-            formatter={(value: number) => `$${value.toLocaleString()}`}
-            contentStyle={{
-              backgroundColor: 'rgba(255, 255, 255, 0.95)',
-              border: '1px solid #e5e7eb',
-              borderRadius: '8px',
+            formatter={(value: any) => [`${value} ETH`, 'Volume']}
+            labelFormatter={(label: string, payload: any) => {
+              if (payload && payload[0]) {
+                return `Asset: ${payload[0].payload.fullAsset}`;
+              }
+              return label;
             }}
           />
           <Legend />
-          <Bar dataKey="volume" fill="#3b82f6" name="Volume ($)" />
+          <Bar dataKey="volume" fill="#3b82f6" name="Volume" />
         </BarChart>
       </ResponsiveContainer>
     </div>

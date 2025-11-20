@@ -4,25 +4,26 @@ import type {
   EntityData,
   ParsedEntity,
   ParsedEvent,
-  ParsedAaveEvent,
-  ParsedUniswapEvent,
-  ParsedMetric,
-  ParsedPrice,
   EventFilters,
   EventStats,
-  ProtocolType,
-  EntityType,
   ArkivEntity,
 } from './types';
 
-// Parse entity payload
+// ============================================================================
+// PAYLOAD PARSING
+// ============================================================================
+
+// Parse entity payload from Uint8Array to JSON
 export function parseEntityPayload<T extends EntityData = EntityData>(payload: Uint8Array): T {
   const text = new TextDecoder().decode(payload);
   return JSON.parse(text);
 }
 
-// Parse entity to typed entity
+// Parse Arkiv entity to typed entity with key
 export function parseEntity<T extends EntityData = EntityData>(entity: ArkivEntity): ParsedEntity<T> {
+  if (!entity.payload) {
+    throw new Error(`Entity ${entity.key} has no payload`);
+  }
   const data = parseEntityPayload<T>(entity.payload);
   return {
     ...data,
@@ -31,16 +32,18 @@ export function parseEntity<T extends EntityData = EntityData>(entity: ArkivEnti
 }
 
 // ============================================================================
-// PROTOCOL EVENT QUERIES
+// AAVE V3 EVENT QUERIES
 // ============================================================================
 
-// Query all protocol events
+/**
+ * Query all Aave V3 events
+ */
 export async function queryAllEvents(limit = 100): Promise<ParsedEvent[]> {
   const client = getArkivPublicClient();
 
   const result = await client
     .buildQuery()
-    .where(eq('entityType', 'protocol_event'))
+    .where(eq('protocol', 'aave-v3'))
     .withAttributes(true)
     .withPayload(true)
     .fetch();
@@ -48,37 +51,12 @@ export async function queryAllEvents(limit = 100): Promise<ParsedEvent[]> {
   return result.entities.slice(0, limit).map(parseEntity);
 }
 
-// Query events by protocol
-export async function queryEventsByProtocol(
-  protocol: ProtocolType,
-  limit = 100
-): Promise<ParsedEvent[]> {
-  const client = getArkivPublicClient();
-
-  const result = await client
-    .buildQuery()
-    .where(eq('protocol', protocol))
-    .withAttributes(true)
-    .withPayload(true)
-    .fetch();
-
-  return result.entities.slice(0, limit).map(parseEntity);
-}
-
-// Query Aave V3 events
-export async function queryAaveEvents(limit = 100): Promise<ParsedAaveEvent[]> {
-  return queryEventsByProtocol('aave-v3', limit) as Promise<ParsedAaveEvent[]>;
-}
-
-// Query Uniswap V3 events
-export async function queryUniswapEvents(limit = 100): Promise<ParsedUniswapEvent[]> {
-  return queryEventsByProtocol('uniswap-v3', limit) as Promise<ParsedUniswapEvent[]>;
-}
-
-// Query events by type
+/**
+ * Query events by specific event type
+ */
 export async function queryEventsByType(
   eventType: string,
-  limit = 50
+  limit = 100
 ): Promise<ParsedEvent[]> {
   const client = getArkivPublicClient();
 
@@ -92,10 +70,15 @@ export async function queryEventsByType(
   return result.entities.slice(0, limit).map(parseEntity);
 }
 
-// Query events by asset
+/**
+ * Query events by asset
+ * Note: Only works for 'reserve' attribute (Withdraw, Supply)
+ * For FlashLoan use queryEventsByType('FlashLoan') and filter client-side
+ * For LiquidationCall use queryEventsByType('LiquidationCall') and filter client-side
+ */
 export async function queryEventsByAsset(
   asset: string,
-  limit = 50
+  limit = 100
 ): Promise<ParsedEvent[]> {
   const client = getArkivPublicClient();
 
@@ -109,10 +92,12 @@ export async function queryEventsByAsset(
   return result.entities.slice(0, limit).map(parseEntity);
 }
 
-// Query events by user
+/**
+ * Query events by user address
+ */
 export async function queryEventsByUser(
   userAddress: string,
-  limit = 50
+  limit = 100
 ): Promise<ParsedEvent[]> {
   const client = getArkivPublicClient();
 
@@ -126,7 +111,37 @@ export async function queryEventsByUser(
   return result.entities.slice(0, limit).map(parseEntity);
 }
 
-// Query events with filters
+/**
+ * Query events by transaction hash
+ */
+export async function queryEventsByTxHash(
+  txHash: string
+): Promise<ParsedEvent[]> {
+  const client = getArkivPublicClient();
+
+  const result = await client
+    .buildQuery()
+    .where(eq('txHash', txHash))
+    .withAttributes(true)
+    .withPayload(true)
+    .fetch();
+
+  return result.entities.map(parseEntity);
+}
+
+/**
+ * Query events with complex filters
+ *
+ * IMPORTANT: Arkiv only supports ONE .where() clause per query.
+ * We use priority-based filtering:
+ * 1. eventType (most specific)
+ * 2. user (if no eventType)
+ * 3. asset via reserve (if no eventType or user)
+ * 4. txHash (if specified)
+ * 5. protocol='aave-v3' (default)
+ *
+ * All other filters are applied client-side.
+ */
 export async function queryEventsWithFilters(
   filters: EventFilters
 ): Promise<ParsedEvent[]> {
@@ -134,20 +149,22 @@ export async function queryEventsWithFilters(
 
   let query = client.buildQuery();
 
-  // Priority: entity type > protocol > specific filters
-  if (filters.entityType) {
-    query = query.where(eq('entityType', filters.entityType));
-  } else if (filters.protocol) {
-    query = query.where(eq('protocol', filters.protocol));
+  // Priority-based query selection (only ONE where clause allowed)
+  if (filters.txHash) {
+    // TxHash is most specific
+    query = query.where(eq('txHash', filters.txHash));
   } else if (filters.eventType && filters.eventType !== 'all') {
+    // EventType is very selective
     query = query.where(eq('eventType', filters.eventType));
-  } else if (filters.asset) {
-    query = query.where(eq('reserve', filters.asset));
   } else if (filters.user) {
+    // User address filter
     query = query.where(eq('user', filters.user));
+  } else if (filters.asset) {
+    // Asset filter (only works for reserve attribute)
+    query = query.where(eq('reserve', filters.asset));
   } else {
-    // Default: get all protocol events
-    query = query.where(eq('entityType', 'protocol_event'));
+    // Default: get all Aave V3 events
+    query = query.where(eq('protocol', 'aave-v3'));
   }
 
   const result = await query
@@ -157,77 +174,81 @@ export async function queryEventsWithFilters(
 
   let events = result.entities.map(parseEntity);
 
-  // Client-side filtering for protocol (if entityType was the main filter)
-  if (filters.entityType && filters.protocol) {
-    events = events.filter(e => (e as any).protocol === filters.protocol);
-  }
+  // ========================================================================
+  // CLIENT-SIDE FILTERING
+  // ========================================================================
 
-  // Client-side filtering for specific event type
-  if (filters.eventType && filters.eventType !== 'all' && (filters.entityType || filters.protocol)) {
+  // Filter by event type (if not used in main query)
+  if (filters.eventType && filters.eventType !== 'all' && !filters.txHash && filters.eventType !== filters.eventType) {
     events = events.filter(e => e.eventType === filters.eventType);
   }
 
-  // Client-side filtering for asset
-  if (filters.asset && (filters.eventType || filters.protocol || filters.entityType)) {
+  // Filter by asset (check multiple fields)
+  if (filters.asset && !filters.txHash) {
     events = events.filter(e => {
-      // Handle both Aave (reserve) and Uniswap (tokenIn/tokenOut)
-      return (e as any).reserve === filters.asset ||
-             (e as any).tokenIn === filters.asset ||
-             (e as any).tokenOut === filters.asset;
+      const data = e as any;
+      return (
+        data.reserve === filters.asset ||          // Withdraw, Supply
+        data.asset === filters.asset ||            // FlashLoan
+        data.collateralAsset === filters.asset ||  // LiquidationCall
+        data.debtAsset === filters.asset           // LiquidationCall
+      );
     });
   }
 
-  // Client-side filtering for user
-  if (filters.user && (filters.eventType || filters.protocol || filters.entityType || filters.asset)) {
+  // Filter by user (check multiple fields)
+  if (filters.user && filters.eventType && filters.eventType !== 'all') {
     events = events.filter(e => {
-      // Handle both Aave (user) and Uniswap (sender/recipient)
-      return (e as any).user === filters.user ||
-             (e as any).sender === filters.user ||
-             (e as any).recipient === filters.user;
+      const data = e as any;
+      return (
+        data.user === filters.user ||         // Withdraw, Supply, LiquidationCall
+        data.initiator === filters.user ||    // FlashLoan
+        data.liquidator === filters.user      // LiquidationCall
+      );
     });
   }
 
-  // Client-side filtering for amount ranges
+  // Filter by amount range (convert BigInt strings to numbers for comparison)
   if (filters.minAmount) {
-    const min = parseFloat(filters.minAmount);
+    const min = BigInt(filters.minAmount);
     events = events.filter(e => {
-      const amount = parseFloat((e as any).amountUSD || (e as any).amount || '0');
-      return amount >= min;
+      const data = e as any;
+      const amount = data.amount || data.debtToCover || '0';
+      try {
+        return BigInt(amount) >= min;
+      } catch {
+        return false;
+      }
     });
   }
 
   if (filters.maxAmount) {
-    const max = parseFloat(filters.maxAmount);
+    const max = BigInt(filters.maxAmount);
     events = events.filter(e => {
-      const amount = parseFloat((e as any).amountUSD || (e as any).amount || '0');
-      return amount <= max;
+      const data = e as any;
+      const amount = data.amount || data.debtToCover || '0';
+      try {
+        return BigInt(amount) <= max;
+      } catch {
+        return false;
+      }
     });
   }
-
-  // Client-side filtering for date ranges
-  if (filters.startDate) {
-    const startTime = new Date(filters.startDate).getTime();
-    events = events.filter(e => new Date(e.timestamp).getTime() >= startTime);
-  }
-
-  if (filters.endDate) {
-    const endTime = new Date(filters.endDate).getTime();
-    events = events.filter(e => new Date(e.timestamp).getTime() <= endTime);
-  }
-
-  // Sort by timestamp descending
-  events.sort((a, b) =>
-    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  );
 
   // Apply limit
   const limit = filters.limit || 100;
   return events.slice(0, limit);
 }
 
-// Calculate statistics
+// ============================================================================
+// STATISTICS CALCULATION
+// ============================================================================
+
+/**
+ * Calculate aggregate statistics from events
+ */
 export async function calculateEventStats(): Promise<EventStats> {
-  const events = await queryAllEvents(1000); // Get more events for stats
+  const events = await queryAllEvents(1000);
 
   const stats: EventStats = {
     totalEvents: events.length,
@@ -235,187 +256,51 @@ export async function calculateEventStats(): Promise<EventStats> {
     totalVolume: {},
     uniqueUsers: 0,
     recentEvents: events.slice(0, 10),
-    protocolBreakdown: {},
   };
 
-  // Collect unique users (handles both Aave user field and Uniswap sender/recipient)
   const uniqueUserSet = new Set<string>();
 
   events.forEach(event => {
     // Count by event type
-    if (!stats.eventsByType[event.eventType]) {
-      stats.eventsByType[event.eventType] = 0;
-    }
-    stats.eventsByType[event.eventType]++;
-
-    // Count by protocol
-    const protocol = (event as any).protocol;
-    if (protocol) {
-      if (!stats.protocolBreakdown![protocol]) {
-        stats.protocolBreakdown![protocol] = 0;
-      }
-      stats.protocolBreakdown![protocol]++;
-    }
+    stats.eventsByType[event.eventType] = (stats.eventsByType[event.eventType] || 0) + 1;
 
     // Track unique users
-    const user = (event as any).user || (event as any).sender;
-    if (user) {
-      uniqueUserSet.add(user);
-    }
-    const recipient = (event as any).recipient;
-    if (recipient) {
-      uniqueUserSet.add(recipient);
-    }
+    const data = event as any;
+    if (data.user) uniqueUserSet.add(data.user);
+    if (data.initiator) uniqueUserSet.add(data.initiator);
+    if (data.liquidator) uniqueUserSet.add(data.liquidator);
 
-    // Sum volume by asset
-    // For Aave events, use reserve and amount
-    // For Uniswap events, use tokenIn/tokenOut and amountInUSD/amountOutUSD
-    const reserve = (event as any).reserve;
-    const amount = parseFloat((event as any).amountUSD || (event as any).amount || '0');
-
-    if (reserve && !isNaN(amount)) {
-      if (!stats.totalVolume[reserve]) {
-        stats.totalVolume[reserve] = 0;
+    // Sum volume by asset (track BigInt amounts)
+    try {
+      // For Withdraw/Supply events
+      if (data.reserve && data.amount) {
+        const currentVolume = stats.totalVolume[data.reserve] || BigInt(0);
+        stats.totalVolume[data.reserve] = currentVolume + BigInt(data.amount);
       }
-      stats.totalVolume[reserve] += amount;
-    }
 
-    // Handle Uniswap tokenIn
-    const tokenIn = (event as any).tokenIn;
-    const amountInUSD = parseFloat((event as any).amountInUSD || '0');
-    if (tokenIn && !isNaN(amountInUSD)) {
-      if (!stats.totalVolume[tokenIn]) {
-        stats.totalVolume[tokenIn] = 0;
+      // For FlashLoan events
+      if (data.asset && data.amount) {
+        const currentVolume = stats.totalVolume[data.asset] || BigInt(0);
+        stats.totalVolume[data.asset] = currentVolume + BigInt(data.amount);
       }
-      stats.totalVolume[tokenIn] += amountInUSD;
-    }
 
-    // Handle Uniswap tokenOut
-    const tokenOut = (event as any).tokenOut;
-    const amountOutUSD = parseFloat((event as any).amountOutUSD || '0');
-    if (tokenOut && !isNaN(amountOutUSD)) {
-      if (!stats.totalVolume[tokenOut]) {
-        stats.totalVolume[tokenOut] = 0;
+      // For LiquidationCall events (track both collateral and debt)
+      if (data.collateralAsset && data.liquidatedCollateralAmount) {
+        const currentVolume = stats.totalVolume[data.collateralAsset] || BigInt(0);
+        stats.totalVolume[data.collateralAsset] = currentVolume + BigInt(data.liquidatedCollateralAmount);
       }
-      stats.totalVolume[tokenOut] += amountOutUSD;
+
+      if (data.debtAsset && data.debtToCover) {
+        const currentVolume = stats.totalVolume[data.debtAsset] || BigInt(0);
+        stats.totalVolume[data.debtAsset] = currentVolume + BigInt(data.debtToCover);
+      }
+    } catch (error) {
+      // Skip events with invalid BigInt values
+      console.warn('Failed to parse amount for event:', event.entityKey, error);
     }
   });
 
   stats.uniqueUsers = uniqueUserSet.size;
 
   return stats;
-}
-
-// ============================================================================
-// AGGREGATED METRICS QUERIES
-// ============================================================================
-
-// Query all aggregated metrics
-export async function queryAggregatedMetrics(limit = 100): Promise<ParsedMetric[]> {
-  const client = getArkivPublicClient();
-
-  const result = await client
-    .buildQuery()
-    .where(eq('entityType', 'aggregated_metric'))
-    .withAttributes(true)
-    .withPayload(true)
-    .fetch();
-
-  return result.entities.slice(0, limit).map(entity => parseEntity<ParsedMetric['data']>(entity));
-}
-
-// Query metrics by protocol
-export async function queryMetricsByProtocol(
-  protocol: ProtocolType,
-  limit = 100
-): Promise<ParsedMetric[]> {
-  const client = getArkivPublicClient();
-
-  const result = await client
-    .buildQuery()
-    .where(eq('protocol', protocol))
-    .withAttributes(true)
-    .withPayload(true)
-    .fetch();
-
-  // Filter to only metrics (in case other entity types also have protocol attribute)
-  const metrics = result.entities
-    .map(entity => parseEntity(entity))
-    .filter(entity => entity.entityType === 'aggregated_metric')
-    .slice(0, limit);
-
-  return metrics as ParsedMetric[];
-}
-
-// Query hourly metrics for a specific time window
-export async function queryMetricsByTimeWindow(
-  timeWindow: string,
-  limit = 50
-): Promise<ParsedMetric[]> {
-  const client = getArkivPublicClient();
-
-  const result = await client
-    .buildQuery()
-    .where(eq('timeWindow', timeWindow))
-    .withAttributes(true)
-    .withPayload(true)
-    .fetch();
-
-  return result.entities.slice(0, limit).map(entity => parseEntity<ParsedMetric['data']>(entity));
-}
-
-// ============================================================================
-// PRICE SNAPSHOT QUERIES
-// ============================================================================
-
-// Query all price snapshots
-export async function queryPriceSnapshots(limit = 100): Promise<ParsedPrice[]> {
-  const client = getArkivPublicClient();
-
-  const result = await client
-    .buildQuery()
-    .where(eq('entityType', 'price_snapshot'))
-    .withAttributes(true)
-    .withPayload(true)
-    .fetch();
-
-  return result.entities.slice(0, limit).map(entity => parseEntity<ParsedPrice['data']>(entity));
-}
-
-// Query price snapshots for a specific asset
-export async function queryPricesByAsset(
-  asset: string,
-  limit = 100
-): Promise<ParsedPrice[]> {
-  const client = getArkivPublicClient();
-
-  const result = await client
-    .buildQuery()
-    .where(eq('asset', asset))
-    .withAttributes(true)
-    .withPayload(true)
-    .fetch();
-
-  return result.entities.slice(0, limit).map(entity => parseEntity<ParsedPrice['data']>(entity));
-}
-
-// ============================================================================
-// GENERIC ENTITY QUERIES
-// ============================================================================
-
-// Query entities by type
-export async function queryEntitiesByType<T extends EntityData = EntityData>(
-  entityType: EntityType,
-  limit = 100
-): Promise<ParsedEntity<T>[]> {
-  const client = getArkivPublicClient();
-
-  const result = await client
-    .buildQuery()
-    .where(eq('entityType', entityType))
-    .withAttributes(true)
-    .withPayload(true)
-    .fetch();
-
-  return result.entities.slice(0, limit).map(entity => parseEntity<T>(entity));
 }

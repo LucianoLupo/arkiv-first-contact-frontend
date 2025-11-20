@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { ParsedEvent } from '@/lib/types';
-import { formatDistance } from 'date-fns';
+import { getEventAsset, getEventUser, getEventAmount } from '@/lib/types';
 
 interface EventsTableProps {
   initialEvents?: ParsedEvent[];
@@ -65,13 +65,10 @@ export default function EventsTable({ initialEvents = [] }: EventsTableProps) {
               Asset
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-              Amount
+              Amount (Wei)
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
               User
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-              Time
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
               Tx Hash
@@ -79,37 +76,46 @@ export default function EventsTable({ initialEvents = [] }: EventsTableProps) {
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
-          {events.map((event) => (
-            <tr key={event.entityKey} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-              <td className="px-6 py-4 whitespace-nowrap">
-                <EventTypeBadge type={event.eventType} />
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <span className="font-medium">{event.reserve}</span>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                {parseFloat(event.amount).toLocaleString(undefined, {
-                  maximumFractionDigits: 2,
-                })}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm font-mono">
-                {event.user.slice(0, 6)}...{event.user.slice(-4)}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                {formatDistance(new Date(event.timestamp), new Date(), { addSuffix: true })}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm font-mono">
-                <a
-                  href={`https://explorer.mendoza.hoodi.arkiv.network/tx/${event.txHash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                >
-                  {event.txHash.slice(0, 8)}...
-                </a>
-              </td>
-            </tr>
-          ))}
+          {events.map((event) => {
+            const asset = getEventAsset(event);
+            const user = getEventUser(event);
+            const amount = getEventAmount(event);
+
+            return (
+              <tr key={event.entityKey} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <EventTypeBadge type={event.eventType} />
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className="font-medium text-xs font-mono">
+                    {asset ? `${asset.slice(0, 6)}...${asset.slice(-4)}` : 'N/A'}
+                  </span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {amount ? (
+                    <span title={amount}>
+                      {(Number(amount) / 1e18).toLocaleString(undefined, {
+                        maximumFractionDigits: 4,
+                      })}
+                    </span>
+                  ) : 'N/A'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-mono">
+                  {user ? `${user.slice(0, 6)}...${user.slice(-4)}` : 'N/A'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-mono">
+                  <a
+                    href={`https://explorer.mendoza.hoodi.arkiv.network/tx/${event.txHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                  >
+                    {event.txHash.slice(0, 8)}...
+                  </a>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -119,9 +125,8 @@ export default function EventsTable({ initialEvents = [] }: EventsTableProps) {
 function EventTypeBadge({ type }: { type: string }) {
   const colors: Record<string, string> = {
     Supply: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-    Borrow: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
     Withdraw: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-    Repay: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+    FlashLoan: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
     LiquidationCall: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
   };
 

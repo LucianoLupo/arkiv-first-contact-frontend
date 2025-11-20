@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import type { ParsedEvent } from '@/lib/types';
 
 interface EventDistribution {
   eventType: string;
@@ -10,49 +10,37 @@ interface EventDistribution {
 }
 
 const COLORS = {
-  Supply: '#10b981',      // green
-  Borrow: '#3b82f6',      // blue
-  Withdraw: '#f59e0b',    // yellow
-  Repay: '#8b5cf6',       // purple
+  Supply: '#10b981',          // green
+  Withdraw: '#f59e0b',        // yellow
+  FlashLoan: '#f97316',       // orange
   LiquidationCall: '#ef4444', // red
 };
 
-export default function EventDistributionChart() {
-  const [data, setData] = useState<EventDistribution[]>([]);
-  const [loading, setLoading] = useState(true);
+interface EventDistributionChartProps {
+  events: ParsedEvent[];
+}
 
-  useEffect(() => {
-    fetchDistributionData();
-  }, []);
+export default function EventDistributionChart({ events }: EventDistributionChartProps) {
+  // Calculate event type distribution
+  const eventTypeCounts = events.reduce((acc, event) => {
+    acc[event.eventType] = (acc[event.eventType] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
 
-  async function fetchDistributionData() {
-    try {
-      setLoading(true);
-      const response = await fetch('/api/analytics/distribution');
-      const json = await response.json();
+  const totalEvents = events.length;
 
-      if (json.success) {
-        const chartData = Object.entries(json.data).map(([eventType, count]) => ({
-          eventType,
-          count: count as number,
-          percentage: json.percentages[eventType],
-        }));
+  const chartData = Object.entries(eventTypeCounts).map(([eventType, count]) => ({
+    eventType,
+    count,
+    percentage: ((count / totalEvents) * 100).toFixed(1) + '%',
+  }));
 
-        setData(chartData);
-      }
-    } catch (error) {
-      console.error('Failed to fetch distribution data:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (loading) {
+  if (chartData.length === 0) {
     return (
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h3 className="text-lg font-semibold mb-4">Event Type Distribution</h3>
-        <div className="h-64 flex items-center justify-center">
-          <div className="animate-pulse text-gray-400">Loading chart...</div>
+        <div className="h-64 flex items-center justify-center text-gray-400">
+          No events to display
         </div>
       </div>
     );
@@ -68,32 +56,54 @@ export default function EventDistributionChart() {
       <ResponsiveContainer width="100%" height={300}>
         <PieChart>
           <Pie
-            data={data}
-            dataKey="count"
-            nameKey="eventType"
+            data={chartData}
             cx="50%"
             cy="50%"
-            outerRadius={100}
-            label={({ eventType, percentage }) => `${eventType} (${percentage})`}
+            labelLine={false}
+            label={(entry: any) => `${entry.eventType}: ${entry.percentage}`}
+            outerRadius={80}
+            fill="#8884d8"
+            dataKey="count"
           >
-            {data.map((entry) => (
+            {chartData.map((entry, index) => (
               <Cell
-                key={entry.eventType}
-                fill={COLORS[entry.eventType as keyof typeof COLORS] || '#6b7280'}
+                key={`cell-${index}`}
+                fill={COLORS[entry.eventType as keyof typeof COLORS] || '#6366f1'}
               />
             ))}
           </Pie>
-          <Tooltip
-            formatter={(value: number) => `${value} events`}
-            contentStyle={{
-              backgroundColor: 'rgba(255, 255, 255, 0.95)',
-              border: '1px solid #e5e7eb',
-              borderRadius: '8px',
-            }}
-          />
+          <Tooltip formatter={(value: any) => [`${value} events`, 'Count']} />
           <Legend />
         </PieChart>
       </ResponsiveContainer>
+
+      {/* Summary table */}
+      <div className="mt-4 border-t border-gray-200 dark:border-gray-700 pt-4">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-gray-600 dark:text-gray-400">
+              <th className="pb-2">Event Type</th>
+              <th className="pb-2 text-right">Count</th>
+              <th className="pb-2 text-right">Percentage</th>
+            </tr>
+          </thead>
+          <tbody>
+            {chartData.map((item) => (
+              <tr key={item.eventType} className="border-t border-gray-100 dark:border-gray-800">
+                <td className="py-2 flex items-center gap-2">
+                  <span
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: COLORS[item.eventType as keyof typeof COLORS] || '#6366f1' }}
+                  ></span>
+                  {item.eventType}
+                </td>
+                <td className="py-2 text-right font-semibold">{item.count}</td>
+                <td className="py-2 text-right text-gray-600 dark:text-gray-400">{item.percentage}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

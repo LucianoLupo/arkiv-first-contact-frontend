@@ -10,8 +10,9 @@ export async function GET(request: NextRequest) {
       eventType: searchParams.get('eventType') as any,
       asset: searchParams.get('asset') || undefined,
       user: searchParams.get('user') || undefined,
-      startDate: searchParams.get('startDate') || undefined,
-      endDate: searchParams.get('endDate') || undefined,
+      txHash: searchParams.get('txHash') || undefined,
+      minAmount: searchParams.get('minAmount') || undefined,
+      maxAmount: searchParams.get('maxAmount') || undefined,
       limit: parseInt(searchParams.get('limit') || '100'),
     };
 

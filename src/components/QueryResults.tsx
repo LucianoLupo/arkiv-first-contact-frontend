@@ -1,9 +1,9 @@
 'use client';
 
 import { useMemo } from 'react';
-import { BarChart, Bar, PieChart, Pie, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
-import { formatDistance } from 'date-fns';
+import { BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 import type { ParsedEvent } from '@/lib/types';
+import { getEventAsset, getEventUser, getEventAmount } from '@/lib/types';
 import type { QueryConfig } from './QueryBuilder';
 
 interface QueryResultsProps {
@@ -24,18 +24,7 @@ export default function QueryResults({ results, config }: QueryResultsProps) {
       return Object.entries(grouped).map(([name, value]) => ({ name, value }));
     }
 
-    if (config.chartType === 'line') {
-      // Group by date
-      const grouped: Record<string, number> = {};
-      results.forEach(event => {
-        const date = new Date(event.timestamp).toLocaleDateString();
-        grouped[date] = (grouped[date] || 0) + 1;
-      });
-      return Object.entries(grouped)
-        .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime())
-        .map(([date, count]) => ({ date, count }));
-    }
-
+    // Line chart not available without timestamps
     return [];
   }, [results, config.chartType]);
 
@@ -86,7 +75,9 @@ export default function QueryResults({ results, config }: QueryResultsProps) {
         ) : config.chartType === 'pie' ? (
           <PieChartView data={chartData} />
         ) : config.chartType === 'line' ? (
-          <LineChartView data={chartData} />
+          <div className="text-center py-12 text-gray-500">
+            Line charts are not available (no timestamp data)
+          </div>
         ) : null}
       </div>
     </div>
@@ -101,31 +92,50 @@ function TableView({ results }: { results: ParsedEvent[] }) {
           <tr>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Type</th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Asset</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Amount</th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Amount (Wei)</th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">User</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Time</th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tx</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
-          {results.map((event, idx) => (
-            <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-              <td className="px-6 py-4 whitespace-nowrap">
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getEventTypeColor(event.eventType)}`}>
-                  {event.eventType}
-                </span>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap font-medium">{event.reserve}</td>
-              <td className="px-6 py-4 whitespace-nowrap">{parseFloat(event.amount).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm font-mono">{event.user.slice(0, 6)}...{event.user.slice(-4)}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDistance(new Date(event.timestamp), new Date(), { addSuffix: true })}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm font-mono">
-                <a href={`https://explorer.mendoza.hoodi.arkiv.network/tx/${event.txHash}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800">
-                  {event.txHash.slice(0, 8)}...
-                </a>
-              </td>
-            </tr>
-          ))}
+          {results.map((event, idx) => {
+            const asset = getEventAsset(event);
+            const user = getEventUser(event);
+            const amount = getEventAmount(event);
+
+            return (
+              <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getEventTypeColor(event.eventType)}`}>
+                    {event.eventType}
+                  </span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap font-medium text-xs font-mono">
+                  {asset ? `${asset.slice(0, 6)}...${asset.slice(-4)}` : 'N/A'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {amount ? (
+                    <span title={amount}>
+                      {(Number(amount) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                    </span>
+                  ) : 'N/A'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-mono">
+                  {user ? `${user.slice(0, 6)}...${user.slice(-4)}` : 'N/A'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-mono">
+                  <a
+                    href={`https://explorer.mendoza.hoodi.arkiv.network/tx/${event.txHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400"
+                  >
+                    {event.txHash.slice(0, 8)}...
+                  </a>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -158,7 +168,7 @@ function PieChartView({ data }: { data: any[] }) {
           cx="50%"
           cy="50%"
           outerRadius={120}
-          label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+          label={({ name, percent }: any) => `${name} (${((percent || 0) * 100).toFixed(0)}%)`}
         >
           {data.map((_, index) => (
             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -171,42 +181,24 @@ function PieChartView({ data }: { data: any[] }) {
   );
 }
 
-function LineChartView({ data }: { data: any[] }) {
-  return (
-    <ResponsiveContainer width="100%" height={400}>
-      <LineChart data={data}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="date" />
-        <YAxis />
-        <Tooltip />
-        <Legend />
-        <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} name="Events" />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-}
-
 function getEventTypeColor(eventType: string): string {
   const colors: Record<string, string> = {
     Supply: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-    Borrow: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
     Withdraw: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-    Repay: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+    FlashLoan: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
     LiquidationCall: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
   };
   return colors[eventType] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
 }
 
 function downloadCSV(results: ParsedEvent[]) {
-  const headers = ['Event Type', 'Asset', 'Amount', 'User', 'Timestamp', 'Tx Hash', 'Block'];
+  const headers = ['Event Type', 'Asset', 'Amount', 'User', 'Tx Hash'];
   const rows = results.map(event => [
     event.eventType,
-    event.reserve,
-    event.amount,
-    event.user,
-    event.timestamp,
+    getEventAsset(event) || '',
+    getEventAmount(event) || '',
+    getEventUser(event) || '',
     event.txHash,
-    event.blockNumber,
   ]);
 
   const csv = [

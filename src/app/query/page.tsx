@@ -21,8 +21,6 @@ export default function QueryPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          entityType: config.entityType,
-          protocol: config.protocol,
           eventType: config.eventType,
           asset: config.asset,
           user: config.user,
@@ -116,46 +114,46 @@ export default function QueryPage() {
         <h3 className="text-lg font-semibold mb-4">Example Queries</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <button
-            onClick={() => executeQuery({ protocol: 'aave-v3', eventType: 'Supply', chartType: 'bar', limit: 50 })}
+            onClick={() => executeQuery({ eventType: 'Supply', chartType: 'bar', limit: 50 })}
             className="p-4 bg-white dark:bg-gray-800 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-blue-500 transition-colors text-left"
           >
-            <h4 className="font-semibold mb-1">Aave Supply Events</h4>
+            <h4 className="font-semibold mb-1">Supply Events</h4>
             <p className="text-sm text-gray-600 dark:text-gray-400">View all Aave V3 supply transactions</p>
           </button>
           <button
-            onClick={() => executeQuery({ protocol: 'uniswap-v3', chartType: 'pie', limit: 100 })}
+            onClick={() => executeQuery({ eventType: 'Withdraw', chartType: 'pie', limit: 100 })}
             className="p-4 bg-white dark:bg-gray-800 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-blue-500 transition-colors text-left"
           >
-            <h4 className="font-semibold mb-1">Uniswap Swaps</h4>
-            <p className="text-sm text-gray-600 dark:text-gray-400">See all Uniswap V3 swap events</p>
+            <h4 className="font-semibold mb-1">Withdraw Events</h4>
+            <p className="text-sm text-gray-600 dark:text-gray-400">See all Aave V3 withdrawal events</p>
           </button>
           <button
-            onClick={() => executeQuery({ entityType: 'protocol_event', minAmount: '50000', chartType: 'table', limit: 25 })}
+            onClick={() => executeQuery({ eventType: 'FlashLoan', chartType: 'table', limit: 25 })}
             className="p-4 bg-white dark:bg-gray-800 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-blue-500 transition-colors text-left"
           >
-            <h4 className="font-semibold mb-1">High-Value Transactions</h4>
-            <p className="text-sm text-gray-600 dark:text-gray-400">All transactions over $50,000</p>
+            <h4 className="font-semibold mb-1">Flash Loans</h4>
+            <p className="text-sm text-gray-600 dark:text-gray-400">View all flash loan events</p>
           </button>
           <button
-            onClick={() => executeQuery({ protocol: 'aave-v3', asset: 'USDC', chartType: 'pie', limit: 100 })}
+            onClick={() => executeQuery({ eventType: 'LiquidationCall', chartType: 'table', limit: 100 })}
             className="p-4 bg-white dark:bg-gray-800 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-blue-500 transition-colors text-left"
           >
-            <h4 className="font-semibold mb-1">Aave USDC Activity</h4>
-            <p className="text-sm text-gray-600 dark:text-gray-400">All Aave USDC events with distribution</p>
+            <h4 className="font-semibold mb-1">Liquidations</h4>
+            <p className="text-sm text-gray-600 dark:text-gray-400">All liquidation call events</p>
           </button>
           <button
-            onClick={() => executeQuery({ entityType: 'aggregated_metric', chartType: 'line', limit: 50 })}
+            onClick={() => executeQuery({ minAmount: '1000000000000000000', chartType: 'table', limit: 50 })}
             className="p-4 bg-white dark:bg-gray-800 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-blue-500 transition-colors text-left"
           >
-            <h4 className="font-semibold mb-1">Hourly Metrics</h4>
-            <p className="text-sm text-gray-600 dark:text-gray-400">View aggregated hourly metrics over time</p>
+            <h4 className="font-semibold mb-1">Large Transactions</h4>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Events over 1 ETH equivalent (in Wei)</p>
           </button>
           <button
-            onClick={() => executeQuery({ entityType: 'price_snapshot', chartType: 'line', limit: 100 })}
+            onClick={() => executeQuery({ chartType: 'pie', limit: 100 })}
             className="p-4 bg-white dark:bg-gray-800 rounded-lg border-2 border-gray-200 dark:border-gray-700 hover:border-blue-500 transition-colors text-left"
           >
-            <h4 className="font-semibold mb-1">Token Prices</h4>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Track token price history</p>
+            <h4 className="font-semibold mb-1">All Events</h4>
+            <p className="text-sm text-gray-600 dark:text-gray-400">View all Aave V3 events with distribution</p>
           </button>
         </div>
       </div>

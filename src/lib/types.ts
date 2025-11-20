@@ -1,143 +1,105 @@
-// ============================================================================
-// ENTITY TYPES
-// ============================================================================
-
-export type EntityType = 'protocol_event' | 'aggregated_metric' | 'price_snapshot';
-export type ProtocolType = 'aave-v3' | 'uniswap-v3';
-export type AaveEventType = 'Supply' | 'Borrow' | 'Withdraw' | 'Repay' | 'LiquidationCall';
-export type UniswapEventType = 'Swap';
-export type EventType = AaveEventType | UniswapEventType;
+import type { Entity } from '@arkiv-network/sdk';
 
 // ============================================================================
-// AAVE V3 EVENTS
+// ENTITY TYPES - AAVE V3 ONLY
 // ============================================================================
 
-export interface AaveEvent {
-  entityType: 'protocol_event';
-  eventType: AaveEventType;
+export type ProtocolType = 'aave-v3';
+export type AaveEventType = 'Supply' | 'Withdraw' | 'FlashLoan' | 'LiquidationCall';
+export type EventType = AaveEventType;
+
+// ============================================================================
+// AAVE V3 EVENT INTERFACES
+// ============================================================================
+
+/**
+ * Base interface for all Aave V3 events
+ */
+interface BaseAaveEvent {
   protocol: 'aave-v3';
-  network: string;
-  reserve: string;
-  user: string;
-  amount: string;
-  amountUSD: string;
+  eventType: AaveEventType;
   txHash: string;
-  blockNumber: number;
-  timestamp: string;
-
-  // Event-specific fields (optional)
-  onBehalfOf?: string;
-  to?: string;
-  referralCode?: number;
-  interestRateMode?: number;
-  borrowRate?: string;
-  repayer?: string;
-  useATokens?: boolean;
-  collateralAsset?: string;
-  debtAsset?: string;
-  liquidator?: string;
-  liquidatedCollateralAmount?: string;
-  liquidatedCollateralAmountUSD?: string;
-  debtToCover?: string;
-  debtToCoverUSD?: string;
 }
 
-// ============================================================================
-// UNISWAP V3 EVENTS
-// ============================================================================
-
-export interface UniswapEvent {
-  entityType: 'protocol_event';
-  eventType: 'Swap';
-  protocol: 'uniswap-v3';
-  network: string;
-  sender: string;
-  recipient: string;
-  tokenIn: string;
-  tokenOut: string;
-  amountIn: string;
-  amountOut: string;
-  amountInUSD: string;
-  amountOutUSD: string;
-  sqrtPriceX96: string;
-  liquidity: string;
-  tick: number;
-  txHash: string;
-  blockNumber: number;
-  timestamp: string;
+/**
+ * Withdraw Event
+ * Emitted when a user withdraws from Aave V3
+ */
+export interface WithdrawEvent extends BaseAaveEvent {
+  eventType: 'Withdraw';
+  reserve: string;    // Asset address (e.g., USDC, WETH)
+  user: string;       // User wallet address
+  to: string;         // Recipient address
+  amount: string;     // Amount withdrawn (BigInt as string)
 }
 
-// ============================================================================
-// AGGREGATED METRICS
-// ============================================================================
-
-export interface AggregatedMetric {
-  entityType: 'aggregated_metric';
-  metricType: 'hourly_summary';
-  protocol: ProtocolType;
-  timeWindow: string;
-  timestamp: string;
-  totalVolumeUSD: string;
-  transactionCount: number;
-  uniqueUsers: number;
-  assetVolumes: Record<string, string>;
-  eventTypeCounts: Record<string, number>;
-  avgTransactionSizeUSD: string;
+/**
+ * Supply Event
+ * Emitted when a user supplies assets to Aave V3
+ */
+export interface SupplyEvent extends BaseAaveEvent {
+  eventType: 'Supply';
+  reserve: string;        // Asset address
+  user: string;           // User wallet address
+  onBehalfOf: string;     // Beneficiary receiving aTokens
+  amount: string;         // Amount supplied (BigInt as string)
+  referralCode: string;   // Referral code (BigInt as string)
 }
 
-// ============================================================================
-// PRICE SNAPSHOTS
-// ============================================================================
+/**
+ * FlashLoan Event
+ * Emitted when a flash loan is executed
+ */
+export interface FlashLoanEvent extends BaseAaveEvent {
+  eventType: 'FlashLoan';
+  target: string;             // Flash loan receiver contract
+  initiator: string;          // Address initiating the flash loan
+  asset: string;              // Asset being flash borrowed
+  amount: string;             // Amount flash borrowed (BigInt as string)
+  interestRateMode: string;   // 0=regular, 1=Stable (deprecated), 2=Variable
+  premium: string;            // Fee for flash loan (BigInt as string)
+  referralCode: string;       // Referral code (BigInt as string)
+}
 
-export interface PriceSnapshot {
-  entityType: 'price_snapshot';
-  snapshotType: 'price_snapshot';
-  asset: string;
-  priceUSD: string;
-  timestamp: string;
-  change24h: string;
-  volume24hUSD: string;
-  marketCapUSD?: string;
+/**
+ * LiquidationCall Event
+ * Emitted when a liquidation occurs
+ */
+export interface LiquidationCallEvent extends BaseAaveEvent {
+  eventType: 'LiquidationCall';
+  collateralAsset: string;              // Asset used as collateral
+  debtAsset: string;                    // Asset borrowed
+  user: string;                         // User being liquidated
+  debtToCover: string;                  // Amount of debt covered (BigInt as string)
+  liquidatedCollateralAmount: string;   // Amount of collateral liquidated (BigInt as string)
+  liquidator: string;                   // Address performing liquidation
+  receiveAToken: string;                // Whether liquidator receives aTokens (boolean as string)
 }
 
 // ============================================================================
 // UNION TYPES
 // ============================================================================
 
-export type ProtocolEvent = AaveEvent | UniswapEvent;
-export type EntityData = ProtocolEvent | AggregatedMetric | PriceSnapshot;
+export type AaveEvent = WithdrawEvent | SupplyEvent | FlashLoanEvent | LiquidationCallEvent;
+export type ProtocolEvent = AaveEvent;
+export type EntityData = AaveEvent;
 
 // ============================================================================
 // PARSED ENTITY
 // ============================================================================
 
-export interface ParsedEntity<T extends EntityData = EntityData> extends T {
+export type ParsedEntity<T extends EntityData = EntityData> = T & {
   entityKey: string;
-}
+};
 
 export type ParsedEvent = ParsedEntity<ProtocolEvent>;
 export type ParsedAaveEvent = ParsedEntity<AaveEvent>;
-export type ParsedUniswapEvent = ParsedEntity<UniswapEvent>;
-export type ParsedMetric = ParsedEntity<AggregatedMetric>;
-export type ParsedPrice = ParsedEntity<PriceSnapshot>;
 
 // ============================================================================
 // ARKIV ENTITY RESPONSE
 // ============================================================================
 
-export interface ArkivEntity {
-  key: string;
-  payload: Uint8Array;
-  attributes: Array<{
-    key: string;
-    value: string;
-  }>;
-  contentType: string;
-  expiration: number;
-  owner: string;
-  createdAtBlock: number;
-  lastModifiedAtBlock: number;
-}
+export type ArkivEntity = Entity;
 
 // ============================================================================
 // QUERY RESULT
@@ -157,13 +119,10 @@ export interface EventStats {
   totalEvents: number;
   eventsByType: Record<string, number>;
   totalVolume: {
-    [asset: string]: number;
+    [asset: string]: bigint;
   };
   uniqueUsers: number;
   recentEvents: ParsedEvent[];
-  protocolBreakdown?: {
-    [protocol: string]: number;
-  };
 }
 
 // ============================================================================
@@ -171,13 +130,11 @@ export interface EventStats {
 // ============================================================================
 
 export interface EventFilters {
-  entityType?: EntityType;
   protocol?: ProtocolType;
   eventType?: EventType | 'all';
-  asset?: string;
-  user?: string;
-  startDate?: string;
-  endDate?: string;
+  asset?: string;           // Can be reserve, asset, collateralAsset, or debtAsset
+  user?: string;            // User, initiator, or liquidator
+  txHash?: string;
   limit?: number;
   minAmount?: string;
   maxAmount?: string;
@@ -187,20 +144,50 @@ export interface EventFilters {
 // TYPE GUARDS
 // ============================================================================
 
+export function isWithdrawEvent(entity: EntityData): entity is WithdrawEvent {
+  return entity.eventType === 'Withdraw';
+}
+
+export function isSupplyEvent(entity: EntityData): entity is SupplyEvent {
+  return entity.eventType === 'Supply';
+}
+
+export function isFlashLoanEvent(entity: EntityData): entity is FlashLoanEvent {
+  return entity.eventType === 'FlashLoan';
+}
+
+export function isLiquidationCallEvent(entity: EntityData): entity is LiquidationCallEvent {
+  return entity.eventType === 'LiquidationCall';
+}
+
 export function isAaveEvent(entity: EntityData): entity is AaveEvent {
-  return entity.entityType === 'protocol_event' &&
-         (entity as any).protocol === 'aave-v3';
+  return entity.protocol === 'aave-v3';
 }
 
-export function isUniswapEvent(entity: EntityData): entity is UniswapEvent {
-  return entity.entityType === 'protocol_event' &&
-         (entity as any).protocol === 'uniswap-v3';
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Safely get the primary asset from any event type
+ */
+export function getEventAsset(event: ParsedEvent): string | undefined {
+  const data = event as any;
+  return data.reserve || data.asset || data.collateralAsset || data.debtAsset;
 }
 
-export function isAggregatedMetric(entity: EntityData): entity is AggregatedMetric {
-  return entity.entityType === 'aggregated_metric';
+/**
+ * Safely get the primary user from any event type
+ */
+export function getEventUser(event: ParsedEvent): string | undefined {
+  const data = event as any;
+  return data.user || data.initiator || data.liquidator;
 }
 
-export function isPriceSnapshot(entity: EntityData): entity is PriceSnapshot {
-  return entity.entityType === 'price_snapshot';
+/**
+ * Safely get the primary amount from any event type
+ */
+export function getEventAmount(event: ParsedEvent): string | undefined {
+  const data = event as any;
+  return data.amount || data.debtToCover || data.liquidatedCollateralAmount;
 }

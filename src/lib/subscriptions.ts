@@ -1,6 +1,6 @@
 import { getArkivClientForBrowser } from './arkiv';
 import type { ParsedEvent } from './types';
-import { parseEventPayload } from './queries';
+import { parseEntityPayload } from './queries';
 
 export async function subscribeToNewEvents(
   onNewEvent: (event: ParsedEvent) => void
@@ -16,7 +16,7 @@ export async function subscribeToNewEvents(
         // Check if it's an Aave event
         const protocolAttr = entity.attributes?.find(a => a.key === 'protocol');
         if (protocolAttr?.value === 'aave-v3' && entity.payload) {
-          const parsedEvent = parseEventPayload(entity.payload);
+          const parsedEvent = parseEntityPayload(entity.payload);
           onNewEvent({
             ...parsedEvent,
             entityKey: event.entityKey,
