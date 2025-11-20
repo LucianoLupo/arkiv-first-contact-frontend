@@ -57,11 +57,11 @@ export default function StatsCards() {
       />
       <StatCard
         title="Supply Events"
-        value={stats.eventsByType.Supply}
+        value={stats.eventsByType.Supply || 0}
       />
       <StatCard
         title="Borrow Events"
-        value={stats.eventsByType.Borrow}
+        value={stats.eventsByType.Borrow || 0}
       />
     </div>
   );
